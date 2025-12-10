@@ -1,0 +1,29 @@
+# Use a slim, stable Python base image
+FROM python:3.11-slim
+
+# Set the MLflow version as a build argument
+ARG MLFLOW_VERSION=3.7.0
+
+# Install the dependencies
+# The MLflow package includes the tracking server.
+# Install SQLAlchemy libraries for potential DB connection (optional, but good practice).
+RUN pip install --no-cache-dir \
+    "mlflow==${MLFLOW_VERSION}" \
+    "SQLAlchemy" \
+    "gunicorn"
+
+# Set the default port for the MLflow UI and API
+EXPOSE 5000
+
+# Set the working directory
+WORKDIR /app
+
+# The command to start the MLflow Tracking Server.
+# The server exposes the OTLP tracing endpoint at /v1/traces automatically.
+# --backend-store-uri: Specifies where to store runs, metrics, and parameters (SQLite recommended for simple/test setup).
+# --default-artifact-root: Specifies where to store models and artifacts (local file system in this example).
+CMD ["mlflow", "server", \
+     "--backend-store-uri", "sqlite:///mlflow.db", \
+     "--default-artifact-root", "./mlartifacts", \
+     "--host", "0.0.0.0", \
+     "--port", "5000"]
