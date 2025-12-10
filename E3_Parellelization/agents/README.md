@@ -2,7 +2,83 @@
 
 This guide explains how to add a new agent to the E3_Parallelization project.
 
-## File Structure
+## System Overview: The Todo List Architecture
+
+The E3_Parallelization pipeline uses a **shared todo list** as the central coordination mechanism for parallel document analysis. Understanding this is essential for adding new agents.
+
+### How the Todo List Works
+
+```
+1. file_todo_list_agent
+   └─> Creates initial todo_list_result with all files
+       {filename, moddt, status: "pending", assigned_agent: null, processed_at: null}
+
+2. plan_and_assign_tasks_agent (in loop)
+   └─> Reads todo_list_result
+   └─> Assigns each pending file to a DocumentAnalyzer (round-robin)
+   └─> Updates assigned_agent field in each task
+   └─> Outputs updated todo_list_result
+
+3. parallel_document_analyzers (6 agents in parallel)
+   ├─> DocumentAnalyzer1
+   │   ├─ Reads: {todo_list_result} to find files assigned to "DocumentAnalyzer1"
+   │   ├─ Gets chunks for those files via get_next_chunk("DocumentAnalyzer1")
+   │   └─ Processes chunks and stores result in: document_analysis_1
+   ├─> DocumentAnalyzer2
+   │   └─ Similar flow for its assigned files
+   └─> ... (up to 6 agents)
+
+4. Callback (after each analyzer)
+   └─> Reads todo_list_result
+   └─> Finds tasks assigned to this agent
+   └─> Updates status from "pending" → "completed"
+   └─> Saves updated list back to state
+
+5. file_processing_loop
+   └─> Checks: are there still "pending" tasks?
+   └─> If YES → go back to step 2
+   └─> If NO → exit loop
+
+6. SynthesisAgent
+   └─> Reads all document_analysis_N keys
+   └─> Aggregates into final report
+```
+
+### State Structure
+
+```python
+state = {
+    "todo_list_result": [
+        {
+            "filename": "report_workplace_mental_health.txt",
+            "moddt": "1765393618.3795278",
+            "status": "pending" or "completed",  # ← Updated by callback
+            "processed_at": timestamp,
+            "assigned_agent": "DocumentAnalyzer1"  # ← Assigned by planner
+        },
+        # ... more tasks
+    ],
+    
+    # Agent-specific results (isolated per agent)
+    "document_analysis_1": "Analysis from DocumentAnalyzer1...",
+    "document_analysis_2": "Analysis from DocumentAnalyzer2...",
+    # ... up to document_analysis_6
+    
+    # Aggregated results
+    "aggregated_analysis": "Combined results from all agents...",
+    "synthesized_report": "Final report..."
+}
+```
+
+### Key Design Principles
+
+1. **Shared Todo List** - All agents read from one source of truth about work assignments
+2. **Per-Agent State Isolation** - Each agent stores results in unique keys (document_analysis_N)
+3. **Defensive State Reading** - Always use `.get()` with defaults to handle missing keys
+4. **Callbacks for Coordination** - Agents update shared state after completing work
+5. **Loop for Iterations** - FileProcessingLoop continues until all tasks complete
+
+
 
 Agents are organized in the `agents/` directory:
 ```

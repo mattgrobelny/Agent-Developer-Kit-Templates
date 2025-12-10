@@ -65,7 +65,7 @@ def update_structured_todo_callback_reusable(callback_context: CallbackContext):
 def create_read_summarize_files_agent(agent_number: int):
     """Create and return a ReadSummarizeFilesAgent with a specific number."""
     agent_name = f"ReadSummarizeFilesAgent{agent_number}"
-    output_key = f"ReadSummarizeFilesAgent{agent_number}_result"
+    output_key_str = f"ReadSummarizeFilesAgent{agent_number}_result"
     
     return LlmAgent(
         name=agent_name,
@@ -77,6 +77,6 @@ Output a concise summary of each file you read.
 """,
         description="Summarizes files from example_data directory.",
         tools=[read_data_tool, list_example_files_tool, get_processing_status_tool],
-        output_key=output_key,
+        output_key=output_key_str,
         after_agent_callback=update_structured_todo_callback_reusable
     )

@@ -13,10 +13,8 @@ from tools import calculator_tool, read_data_tool, list_example_files_tool, get_
 from agents import (
     create_file_todo_list_agent,
     create_plan_and_assign_tasks_agent,
-    create_read_summarize_files_agent,
+    create_document_analysis_agent,
     create_merger_agent,
-    create_chunk_manager_agent,
-    create_chunk_analyzer_agent,
 )
 
 from opentelemetry import trace
@@ -25,6 +23,9 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
 load_dotenv()
+
+# Configuration
+NUM_SUMMARIZE_AGENTS = int(os.getenv("NUM_SUMMARIZE_AGENTS", "10"))  # Default to 6 agents
 
 # 1. Setup MLflow Experiment
 mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
@@ -76,37 +77,36 @@ def check_for_pending_files(context: CallbackContext) -> bool:
 
 # Create agents using factory functions
 file_todo_list_agent = create_file_todo_list_agent()
-plan_and_assign_tasks_agent = create_plan_and_assign_tasks_agent()
-read_summarize_files_agent1 = create_read_summarize_files_agent(1)
-read_summarize_files_agent2 = create_read_summarize_files_agent(2)
+plan_and_assign_tasks_agent = create_plan_and_assign_tasks_agent(num_agents=NUM_SUMMARIZE_AGENTS)
+
+# Dynamically create the specified number of DocumentAnalyzer agents
+# Each agent encapsulates chunking internally and can run in parallel
+document_analysis_agents = [
+    create_document_analysis_agent(i) 
+    for i in range(1, NUM_SUMMARIZE_AGENTS + 1)
+]
+
 merger_agent = create_merger_agent()
-chunk_manager_agent = create_chunk_manager_agent()
-chunk_analyzer_agent = create_chunk_analyzer_agent()
+
+print(f"[Config] Using {NUM_SUMMARIZE_AGENTS} DocumentAnalyzer agent(s) with internal chunking")
 
 
 # --- Create Composite Agents ---
 
-# Parallel agent that runs both file summarization agents concurrently
-parallel_agents_summarize = ParallelAgent(
-    name="ParallelFileSummarizationAgent",
-    sub_agents=[read_summarize_files_agent1, read_summarize_files_agent2],
-    description="Runs multiple file summarization agents in parallel."
+# Parallel agent that runs multiple DocumentAnalyzer agents concurrently
+# Each DocumentAnalyzer has internal chunking and analysis loops
+parallel_document_analyzers = ParallelAgent(
+    name="ParallelDocumentAnalyzerAgent",
+    sub_agents=document_analysis_agents,
+    description=f"Runs {NUM_SUMMARIZE_AGENTS} DocumentAnalyzer agent(s) with internal chunking in parallel."
 )
 
 # Loop agent that repeatedly assigns and processes pending files
 file_processing_loop = LoopAgent(
     name="FileProcessingLoop",
-    sub_agents=[plan_and_assign_tasks_agent, parallel_agents_summarize],
+    sub_agents=[plan_and_assign_tasks_agent, parallel_document_analyzers],
     max_iterations=10,
-    description="Repeatedly assigns and processes pending files until all are completed."
-)
-
-# Chunk analysis loop for document chunking and analysis
-analysis_loop = LoopAgent(
-    name="DocumentAnalysisLoop",
-    sub_agents=[chunk_manager_agent, chunk_analyzer_agent],
-    max_iterations=50,
-    description="Iterates through document chunks to build a final summary."
+    description="Repeatedly assigns pending files to DocumentAnalyzer agents and processes them until all are completed."
 )
 
 
@@ -114,11 +114,11 @@ analysis_loop = LoopAgent(
 sequential_pipeline_agent = SequentialAgent(
     name="FileExtractionPipelineAgent",
     sub_agents=[
-        file_todo_list_agent,    # 1. Initialize the todo list
-        analysis_loop,    # 2. Process all files in a loop until none are pending
-        merger_agent             # 3. Final synthesis of all results
+        file_todo_list_agent,      # 1. Initialize the todo list
+        file_processing_loop,      # 2. Process documents: assign tasks then analyze in parallel
+        merger_agent               # 3. Final synthesis of all results
     ],
-    description="Coordinates file processing using a loop to ensure all files are handled and synthesizes the results."
+    description="Coordinates document analysis using parallel DocumentAnalyzer agents with internal chunking and synthesizes the results."
 )
 
 root_agent = sequential_pipeline_agent
