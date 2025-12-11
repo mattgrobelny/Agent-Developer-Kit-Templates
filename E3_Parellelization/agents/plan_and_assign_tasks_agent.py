@@ -1,7 +1,7 @@
 """Plan and Assign Tasks Agent - assigns files to processing agents."""
 
 from google.adk.agents import LlmAgent
-from tools import read_data_tool, list_example_files_tool, get_processing_status_tool
+from ..tools import read_data_tool, list_example_files_tool, get_processing_status_tool
 from .utils import exit_loop
 
 

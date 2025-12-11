@@ -1,22 +1,8 @@
 import os, json, re 
 import mlflow
 from dotenv import load_dotenv
-from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent, LoopAgent
-from google.adk.tools import google_search
-from google.adk.agents.callback_context import CallbackContext
-from google.adk.tools.tool_context import ToolContext
-from typing import Optional
-from google.genai import types
-from tools import calculator_tool, read_data_tool, list_example_files_tool, get_processing_status_tool, update_processing_status_tool, assign_file_for_work_tool, get_work_assignments_tool, complete_assignment_tool
 
-# Import agent factory functions
-from agents import (
-    create_file_todo_list_agent,
-    create_plan_and_assign_tasks_agent,
-    create_document_analysis_agent,
-    create_merger_agent,
-)
-
+# MFLOW + OpenTelemetry Tracing Imports must be improted before the ADK imports
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
@@ -25,7 +11,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 load_dotenv()
 
 # Configuration
-NUM_SUMMARIZE_AGENTS = int(os.getenv("NUM_SUMMARIZE_AGENTS", "10"))  # Default to 6 agents
+NUM_SUMMARIZE_AGENTS = int(os.getenv("NUM_SUMMARIZE_AGENTS", "10"))  # Default to 10 agents
 
 # 1. Setup MLflow Experiment
 mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
@@ -52,7 +38,53 @@ tracer_provider = TracerProvider()
 tracer_provider.add_span_processor(SimpleSpanProcessor(otlp_exporter))
 trace.set_tracer_provider(tracer_provider)
 
+# --- 4. Add Attributes to a Trace Span (New Steps) ---
 
+# Get a tracer instance (always necessary to create spans)
+tracer = trace.get_tracer(__name__)
+
+# Start an MLflow Run to associate the trace with
+with mlflow.start_run(experiment_id=experiment_id) as run:
+    
+    # Create the root span for the operation
+    with tracer.start_as_current_span("parallel_data_processing") as span:
+        
+        # --- Add Attributes to the Span Here ---
+        
+        # 1. Attribute for the environment/context
+        span.set_attribute("environment", "dev")
+        
+        # 2. Attribute for resource usage (numerical)
+        span.set_attribute("number_of_agents", NUM_SUMMARIZE_AGENTS)
+        
+        # 3. Attribute for the input data source
+        # span.set_attribute("data.source.bucket", "s3://my-ml-data")
+        
+        # 4. Attribute for a specific configuration detail (boolean)
+        # span.set_attribute("use_caching", True)
+        
+        print(f"Executing operation with span: {span.context.span_id}")
+        
+        # Simulate the work being traced
+        # ... Your parallelization logic goes here ...
+        
+from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent, LoopAgent
+from google.adk.tools import google_search
+from google.adk.agents.callback_context import CallbackContext
+from google.adk.tools.tool_context import ToolContext
+from typing import Optional
+from google.genai import types
+# from .tools import calculator_tool, read_data_tool, list_example_files_tool, get_processing_status_tool, update_processing_status_tool, assign_file_for_work_tool, get_work_assignments_tool, complete_assignment_tool
+
+# Import agent factory functions
+from .agents import (
+    create_file_todo_list_agent,
+    create_plan_and_assign_tasks_agent,
+    create_document_analysis_agent,
+    create_merger_agent,
+)
+
+print("Tracing complete.")
 def check_for_pending_files(context: CallbackContext) -> bool:
     """
     Checks the todo_list_result in state for any tasks with status 'pending'.

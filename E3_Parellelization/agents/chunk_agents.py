@@ -2,7 +2,7 @@
 
 from google.adk.agents import LlmAgent
 from .utils import exit_loop
-from tools import get_next_chunk_tool 
+from ..tools import get_next_chunk_tool 
 
 GEMINI_MODEL = "gemini-2.5-flash"
 

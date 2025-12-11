@@ -140,8 +140,8 @@ def _initialize_document(document_id: str, agent_id: str):
     try:
         full_text = read_data(document_id)
         
-        # Chunking logic: split into 1000-character segments with 5% overlap
-        chunk_size = 1000
+        # Chunking logic: split into 2000-character segments with 5% overlap
+        chunk_size = 2000
         overlap_percentage = 0.05  # 5% overlap
         overlap_size = int(chunk_size * overlap_percentage)
         step_size = chunk_size - overlap_size
